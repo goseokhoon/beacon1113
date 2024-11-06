@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#80000000"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:id="@+id/recommendation_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:orientation="vertical"
+        android:background="@drawable/recommendation_background"
+        android:padding="20dp"
+        android:elevation="0dp"> <!-- 그림자 제거 추가 -->
+
+        <!-- 굵은 제목 텍스트 -->
+        <TextView
+            android:id="@+id/recommendation_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="다른 고객이 눈여겨본 상품"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/black"
+            android:layout_gravity="center"
+            android:paddingBottom="10dp" />
+
+        <TextView
+            android:id="@+id/recommendation_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="상품 이름:"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/recommendation_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="이름 표시"
+            android:textSize="16sp"
+            android:textColor="#555555"
+            android:paddingBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/recommendation_price_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="가격:"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/recommendation_price"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="가격 표시"
+            android:textSize="16sp"
+            android:textColor="#555555"
+            android:paddingBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/recommendation_stock_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="재고 현황:"
+            android:textSize="16sp"
+            android:textColor="#333333"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/recommendation_stock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="재고 표시"
+            android:textSize="16sp"
+            android:textColor="#555555"
+            android:paddingBottom="8dp"/>
+
+        <Button
+            android:id="@+id/close_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="닫기"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/button_background"
+            android:layout_marginTop="16dp"
+            android:layout_gravity="center"/>
+
+    </LinearLayout>
+</RelativeLayout>

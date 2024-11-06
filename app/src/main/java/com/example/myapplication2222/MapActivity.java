@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -209,7 +210,6 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     private static final double MAX_DISTANCE = 3.0; // 최대 허용 거리
     private KalmanFilter kalmanFilterX;
     private KalmanFilter kalmanFilterY;
-    private Button runButton;
     private Map<String, MedianFilter> rssiMedianFilters = new HashMap<>();
     private static final int MEDIAN_FILTER_SIZE = 2;
     private static final double POSITION_UPDATE_THRESHOLD = 0.1; // meters
@@ -219,7 +219,9 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     private Map<String, Double> pathLossExponentN1 = new HashMap<>();
     private Map<String, Double> pathLossExponentN2 = new HashMap<>();
     private Map<String, Double> rssiCalibration = new HashMap<>();
-
+    private Map<Integer, Long> beaconStayTimes = new HashMap<>();
+    private static final long RECOMMENDATION_DELAY = 5000; // 5초
+    public static boolean recommendationShown = false; // 추천 다이얼로그가 이미 표시되었는지 확인하는 변수
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -255,9 +257,6 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
             }
         }
 
-        runButton = findViewById(R.id.button);
-        runButton.setOnClickListener(v -> handler.sendEmptyMessage(0));
-
     }
 
     @Override
@@ -269,6 +268,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     @Override
     public void onBeaconServiceConnect() {
         beaconManager.addRangeNotifier((beacons, region) -> {
+            Log.d(TAG, "비콘 탐지 중: " + beacons.size() + "개 비콘 발견");
             if (beacons.size() > 0) {
                 beaconList.clear();
                 beaconList.addAll(beacons);
@@ -281,6 +281,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
             Log.e(TAG, "Error starting ranging", e);
         }
     }
+
 
     private static final double N1 = 2.0; // Path loss exponent for LOS
     private static final double N2 = 3.3; // Path loss exponent for NLOS
@@ -392,9 +393,9 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
                     double filteredRssi = rssiMedianFilters.get(address).addSample(beacon.getRssi());
                     double smoothedRssi = rssiAverages.get(address).addSample(filteredRssi);
                     double distance = calculateDistance(smoothedRssi, "beacon" + minor);
-                    distance = Math.min(distance, MAX_DISTANCE); // MAX_DISTANCE로 거리 제한을 추가
+                    distance = Math.min(distance, MAX_DISTANCE);
                     if (distance < 0.1) {
-                        distance = 0.1; // 너무 짧은 거리의 경우 최소값 설정 (신호 왜곡 방지)
+                        distance = 0.1;
                     }
 
                     beaconDistances.put(minor, distance);
@@ -430,28 +431,42 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
                     float radius = (float) (distance / Math.max(MART_WIDTH, MART_HEIGHT) * Math.max(customView.getWidth(), customView.getHeight()));
 
                     customView.updateBeaconPosition(minor - 1, beaconXScreen, beaconYScreen, radius, color);
+
+                    // 비콘 거리와 시간 조건 체크
+                    if (distance <= 0.5 && !recommendationShown) { // 0.5m 이내에 있을 때
+                        long currentTime = System.currentTimeMillis();
+                        if (!beaconStayTimes.containsKey(minor)) {
+                            beaconStayTimes.put(minor, currentTime); // 처음으로 비콘이 감지되었을 때 시간 저장
+                        } else {
+                            long elapsedTime = currentTime - beaconStayTimes.get(minor);
+                            if (elapsedTime >= RECOMMENDATION_DELAY) { // 5초가 지나고 다이얼로그가 아직 표시되지 않았다면
+                                navigateToRecommendationActivity(minor); // 추천 액티비티 호출
+                                recommendationShown = true; // 다이얼로그 표시 상태 업데이트
+                            }
+                        }
+                    } else {
+                        // 비콘이 감지되지 않으면 상태를 리셋
+                        beaconStayTimes.remove(minor);
+                    }
                 }
             }
 
             if (beaconDistances.size() == 3) {
                 double[] userPosition = calculateUserPosition(beaconDistances);
                 if (userPosition != null) {
-                    // 칼만 필터 적용
                     userPosition[0] = kalmanFilterX.update(userPosition[0]);
                     userPosition[1] = kalmanFilterY.update(userPosition[1]);
 
                     if (lastPosition == null || calculateDistance(lastPosition, userPosition) > POSITION_UPDATE_THRESHOLD) {
-                        // 이동 제한 및 부드러운 전환
                         if (lastPosition != null) {
                             double distanceMoved = calculateDistance(lastPosition, userPosition);
-                            double maxAllowedDistance = 0.1; // 최대 허용 이동 거리 (m)
+                            double maxAllowedDistance = 0.1;
                             double alpha = Math.min(1.0, maxAllowedDistance / distanceMoved);
 
                             userPosition[0] = lastPosition[0] + (userPosition[0] - lastPosition[0]) * alpha;
                             userPosition[1] = lastPosition[1] + (userPosition[1] - lastPosition[1]) * alpha;
                         }
 
-                        // 위치를 마트 경계 내로 제한
                         userPosition[0] = Math.max(0, Math.min(userPosition[0], MART_WIDTH));
                         userPosition[1] = Math.max(0, Math.min(userPosition[1], MART_HEIGHT));
 
@@ -468,7 +483,6 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
                                 .append(String.format("%.2f", userPosition[0])).append(", ")
                                 .append(String.format("%.2f", userPosition[1])).append(")\n");
 
-                        // RSSI 보정 업데이트
                         for (Map.Entry<Integer, Double> entry : beaconDistances.entrySet()) {
                             updateRssiCalibration("beacon" + entry.getKey(), entry.getValue());
                         }
@@ -482,9 +496,27 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
             }
 
             customView.invalidate();
-            sendEmptyMessageDelayed(0, 250); // 갱신 간격을 0.5초로 변경
+            sendEmptyMessageDelayed(0, 250); // 갱신 간격
         }
     };
+
+
+    private void navigateToRecommendationActivity(int beaconId) {
+        Intent intent = new Intent(this, RecommendationActivity.class);
+        intent.putExtra("beaconId", beaconId);
+        startActivity(intent);
+
+        // 다이얼로그가 표시되면 상태 업데이트
+        recommendationShown = true;
+    }
+    // RecommendationActivity에서 다이얼로그 닫기 버튼 클릭 시
+    private void onCloseRecommendationDialog() {
+        // 다이얼로그를 닫을 때 호출되는 메서드
+        recommendationShown = false; // 다이얼로그가 닫혔으므로 다시 표시 가능
+        finish(); // Activity 종료
+    }
+
+
     private boolean allBeaconsStrong() {
         for (Beacon beacon : beaconList) {
             if (beacon.getRssi() < -65) { // 기존 -70에서 -65로 신호 강도 기준 상향
@@ -628,13 +660,26 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     @Override
     protected void onResume() {
         super.onResume();
-        if (!beaconManager.isBound(this)) beaconManager.bind(this);
-    }
+        Log.d(TAG, "MapActivity resumed, binding beacon manager");
 
+        // 상태를 초기화
+        recommendationShown = false; // 다이얼로그 상태 리셋
+        beaconList.clear(); // 비콘 리스트 초기화
+
+        // 비콘 매니저가 바인딩되지 않았다면 바인딩
+        if (!beaconManager.isBound(this)) {
+            beaconManager.bind(this);
+        }
+
+        // 비콘 탐지 시작
+        handler.sendEmptyMessage(0); // 비콘 탐지 시작
+    }
     @Override
     protected void onPause() {
+        Log.d(TAG, "MapActivity paused, unbinding beacon manager");
         super.onPause();
-        if (beaconManager.isBound(this)) beaconManager.unbind(this);
+        if (beaconManager.isBound(this)) {
+            beaconManager.unbind(this);
+        }
     }
 }
-

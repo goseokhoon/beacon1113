@@ -53,6 +53,8 @@
         <activity android:name=".SignupActivity"/>
         <activity android:name=".ProfileManagementActivity"/>
         <activity android:name=".FaceVerificationActivity"/>
+        <activity android:name=".RecommendationActivity"
+            android:theme="@style/DialogActivityTheme"/>
 
         <meta-data
             android:name="com.google.firebase.ml.vision.DEPENDENCIES"
