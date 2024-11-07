@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.widget.Button;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 
 public class MainActivity extends AppCompatActivity {
@@ -26,6 +28,8 @@ public class MainActivity extends AppCompatActivity {
 
         // FirebaseAuth 인스턴스 초기화
         mAuth = FirebaseAuth.getInstance();
+
+        FirebaseApp.initializeApp(this);
 
         // 앱이 완전히 종료되었다면 로그인 정보와 성인 인증 상태 초기화
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);

@@ -3,7 +3,7 @@
     "project_number": "709195561017",
     "firebase_url": "https://kartrider-f7220-default-rtdb.firebaseio.com",
     "project_id": "kartrider-f7220",
-    "storage_bucket": "kartrider-f7220.appspot.com"
+    "storage_bucket": "kartrider-f7220.firebasestorage.app"
   },
   "client": [
     {
@@ -14,6 +14,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "709195561017-6v2oui3lb31ssgqcf3gckl7hgue9qm6j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.company.test",
+            "certificate_hash": "82616d3fc8458e155b3976b3a2478e1292a8f1f7"
+          }
+        },
         {
           "client_id": "709195561017-5joatto2e0022nu6qc5bb6g4kogfb6hg.apps.googleusercontent.com",
           "client_type": 3

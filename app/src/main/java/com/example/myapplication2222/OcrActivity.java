@@ -241,12 +241,14 @@ public class OcrActivity extends AppCompatActivity {
             recognizer.process(image)
                     .addOnSuccessListener(text -> {
                         String recognizedText = text.getText();
-                        Log.d("OcrActivity", "인식된 텍스트: " + recognizedText);
+                        Log.d("OcrActivity", "인식된 텍스트 (공백 제거 전): " + recognizedText);
 
                         // 생년월일, 이름, 주민등록번호, 신분증 발급일자 추출
                         String dob = findDateOfBirth(recognizedText);
                         String name = findName(recognizedText);
                         String ssn = findSSN(recognizedText);
+                        Log.d("OcrActivity", "주민등록번호 (공백 제거 후): " + ssn); // 공백 제거된 주민등록번호 로그
+
                         String issueDate = findIssueDate(recognizedText);
 
                         if (ssn != null) {
@@ -257,6 +259,7 @@ public class OcrActivity extends AppCompatActivity {
 
                         // 주민등록번호에 하이픈 추가
                         String ssnWithHyphen = addHyphenToSSN(ssn);
+                        Log.d("OcrActivity", "하이픈 추가된 주민등록번호: " + ssnWithHyphen); // 하이픈 추가 후 로그
 
                         runOnUiThread(() -> {
                             if (dob != null && !isMinor(dob) && issueDate != null) {
@@ -299,54 +302,42 @@ public class OcrActivity extends AppCompatActivity {
         adultVerificationLayout.setVisibility(View.VISIBLE);
         adultVerificationResult.setText("1차 성인 인증을 진행합니다...");
 
-
         new Handler().postDelayed(() -> {
             dobExtracted.setText("추출된 생년월일: " + dob);
             dobExtracted.setVisibility(View.VISIBLE);
-            issueDateTextView.setText("추출된 발급일자: " + issueDate);
-            issueDateTextView.setVisibility(View.VISIBLE);
+            issueDateTextView.setText("추출된 발급일자: " + issueDate); // 발급일자 UI에 설정
+            issueDateTextView.setVisibility(View.VISIBLE); // UI에 보이게 설정
             adultVerificationResult.setText("1차 성인 인증이 완료되었습니다.");
 
             nameComparisonResult.setText("2차 본인 인증을 진행합니다...");
             nameVerificationLayout.setVisibility(View.VISIBLE);
 
             new Handler().postDelayed(() -> {
-                // 조건문 이전에 디버깅 로그 추가
-                Log.e("OcrActivity", "조건문 이전 - 추출된 이름: " + name);
-                Log.e("OcrActivity", "조건문 이전 - 추출된 주민등록번호: " + ssnWithHyphen);
-                Log.e("OcrActivity", "조건문 이전 - 현재 사용자: " + (currentUser != null ? currentUser.getDisplayName() : "null"));
-
                 if (name != null && ssnWithHyphen != null && currentUser != null) {
                     getCurrentUserSSN(currentUser.getUid(), currentUserSSN -> {
+                        if (currentUserSSN != null) {
+                            currentUserSSN = currentUserSSN.replace("-", ""); // 하이픈 제거
+                        }
 
-                        // 조건문 내부 디버깅 로그
-                        Log.e("OcrActivity", "조건문 통과 - 추출된 이름: " + name);
-                        Log.e("OcrActivity", "조건문 통과 - 저장된 이름: " + currentUser.getDisplayName());
-                        Log.e("OcrActivity", "조건문 통과 - 추출된 주민등록번호: " + ssnWithHyphen);
-                        Log.e("OcrActivity", "조건문 통과 - 저장된 주민등록번호: " + currentUserSSN);
-
-                        // 이름과 주민등록번호 비교 시 형식 통일 (하이픈 제거하지 않음)
-                        boolean isSSNMatch = ssnWithHyphen.trim().equals(currentUserSSN != null ? currentUserSSN.trim() : "");
-
-                        String standardizedName = name.trim();
-                        String standardizedCurrentUserName = currentUser.getDisplayName() != null ? currentUser.getDisplayName().trim() : "";
-                        boolean isNameMatch = standardizedName.equalsIgnoreCase(standardizedCurrentUserName);
+                        final String currentUserName = currentUser.getDisplayName();
+                        boolean isNameMatch = currentUserName != null && currentUserName.equalsIgnoreCase(name);
+                        boolean isSSNMatch = currentUserSSN != null && currentUserSSN.equals(ssnWithHyphen.replace("-", ""));
 
                         // Firestore에서 로그인된 사용자의 발급일자 가져오기
                         getUserIssueDate(currentUser.getUid(), currentUserIssueDate -> {
                             runOnUiThread(() -> {
                                 idCardName.setText("신분증 이름: " + name);
-                                loggedInUserName.setText("로그인된 사용자 이름: " + currentUser.getDisplayName());
+                                loggedInUserName.setText("로그인된 사용자 이름: " + currentUserName);
 
                                 if (isNameMatch && isSSNMatch) {
                                     // 발급일자 비교
                                     boolean isIssueDateMatch = currentUserIssueDate != null && currentUserIssueDate.equals(issueDate);
                                     if (isIssueDateMatch) {
                                         nameComparisonResult.setText("2차 본인 인증이 완료되었습니다.");
-                                        // FaceVerificationActivity로 이동
-                                        Intent intent = new Intent(OcrActivity.this, FaceVerificationActivity.class);
+                                        // 얼굴 등록을 위한 새로운 액티비티로 이동
+                                        Intent intent = new Intent(OcrActivity.this, FaceRegistrationActivity.class);
                                         startActivity(intent);
-                                        finish();
+                                        finish(); // 현재 액티비티 종료
                                     } else {
                                         nameComparisonResult.setText("본인 인증 실패: 발급일자가 일치하지 않습니다.");
                                     }
@@ -364,10 +355,10 @@ public class OcrActivity extends AppCompatActivity {
                 }
             }, 1500); // 1.5초 후 2차 본인 인증 진행
         }, 1500); // 1.5초 후 1차 성인 인증 완료 메시지
-
-
     }
-        // Firestore에서 사용자의 발급일자를 가져오는 메서드 (콜백 방식으로 수정)
+
+
+    // Firestore에서 사용자의 발급일자를 가져오는 메서드 (콜백 방식으로 수정)
     private void getUserIssueDate(String userId, FirestoreCallbackIssueDate callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         DocumentReference userRef = db.collection("users").document(userId);
@@ -413,36 +404,28 @@ public class OcrActivity extends AppCompatActivity {
         void onCallback(String ssn);
     }
 
+    // 주민등록번호 찾기 추가
     private String findSSN(String text) {
-        // 모든 공백 제거 및 연속된 하이픈을 하나로 축소
-        text = text.replaceAll("\\s+", "").replaceAll("-{2,}", "-");
+        // 전체 텍스트에서 모든 공백 제거
+        text = text.replaceAll("\\s+", "");  // 텍스트 전체의 공백 제거
 
-        // 숫자만 남겨서 주민등록번호 포맷에 맞게 추출
-        String cleanedText = text.replaceAll("[^0-9]", "");
-
-        // 숫자가 13자리인 경우 형식에 맞춰 하이픈 추가
-        if (cleanedText.length() == 13) {
-            return cleanedText.substring(0, 6) + "-" + cleanedText.substring(6);
-        }
-
-        // 주민등록번호 패턴 (YYMMDD-XXXXXXX) 또는 하이픈이 포함된 형식도 허용
+        // 주민등록번호 형식 (YYMMDD-XXXXXXX) 또는 하이픈이 없는 형식도 허용
         Pattern ssnPattern = Pattern.compile("\\d{6}-?\\d{7}");
         Matcher ssnMatcher = ssnPattern.matcher(text);
 
         if (ssnMatcher.find()) {
-            return ssnMatcher.group(0); // 정규화된 주민등록번호 반환
+            // 추출된 주민등록번호에서 하이픈과 공백 제거
+            return ssnMatcher.group(0).replace("-", "").replaceAll("\\s+", "");
         }
         return null;
     }
 
 
+    // 생년월일 찾기 개선
     private String findDateOfBirth(String text) {
         // 주민등록번호에서 생년월일 추출
         String ssn = findSSN(text);
-
-        // 하이픈이 있거나 13자리 숫자로 추출된 경우
-        if (ssn != null && (ssn.length() == 13 || ssn.length() == 14)) {
-            // 하이픈을 제외한 생년월일 추출
+        if (ssn != null && ssn.length() == 13) {  // 주민등록번호가 올바르게 추출된 경우
             String year = ssn.substring(0, 2);
             String month = ssn.substring(2, 4);
             String day = ssn.substring(4, 6);
@@ -461,53 +444,36 @@ public class OcrActivity extends AppCompatActivity {
         }
         return null;
     }
-
+    // 이름 찾기
     private String findName(String text) {
-        // 모든 텍스트를 한 줄로 병합 (줄바꿈과 공백 제거)
-        String singleLineText = text.replaceAll("\\s+", " ");
+        // 주민등록번호 패턴을 찾아서 그 위의 텍스트를 찾음 (공백 또는 하이픈 포함 허용)
+        Pattern ssnPattern = Pattern.compile("\\d{2}\\s?\\d{2}\\s?\\d{2}[-\\s]?\\d{7}");
+        Matcher ssnMatcher = ssnPattern.matcher(text);
 
-        // 하이픈이 포함된 번호를 찾는 대략적인 패턴 (주민등록번호와 면허번호 모두 포함)
-        Pattern numberWithHyphenPattern = Pattern.compile("\\d+-\\d+(-\\d+)?");
-        Matcher numberMatcher = numberWithHyphenPattern.matcher(singleLineText);
-
-        // 주민등록번호 패턴 (YYMMDD-XXXXXXX)
-        Pattern ssnPattern = Pattern.compile("\\d{6}-?\\d{7}");
-        Matcher ssnMatcher = ssnPattern.matcher(singleLineText);
-
-        // 주민등록번호 외에 다른 하이픈이 포함된 번호의 위치 찾기
-        int lastHyphenNumberEnd = -1;
-        while (numberMatcher.find()) {
-            // 주민등록번호는 제외하고 나머지 하이픈 번호 중 가장 마지막 번호 위치를 저장
-            if (!ssnMatcher.find() || ssnMatcher.start() != numberMatcher.start()) {
-                lastHyphenNumberEnd = numberMatcher.end();
-            }
-        }
-
-        // 주민등록번호의 위치를 찾음
         if (ssnMatcher.find()) {
+            // 주민등록번호 위치를 기준으로 그 위의 텍스트 추출
             int ssnStartIndex = ssnMatcher.start();
+            String textBeforeSSN = text.substring(0, ssnStartIndex).trim();
 
-            // 1. 주민등록번호 외에 마지막으로 인식된 하이픈 번호 이후 텍스트
-            String nameAfterLastHyphenNumber = "";
-            if (lastHyphenNumberEnd != -1) {
-                String textAfterLastHyphen = singleLineText.substring(lastHyphenNumberEnd, ssnStartIndex).trim();
-                // 한글만 남기고 점이 있으면 제거
-                nameAfterLastHyphenNumber = textAfterLastHyphen.replaceAll("[^가-힣]", "").replaceAll("\\.$", "");
-            }
+            // 줄바꿈으로 텍스트 분리
+            String[] lines = textBeforeSSN.split("\\n");
 
-            // 2. 주민등록번호 앞 텍스트에서 한글만 남기기
-            String textBeforeSSN = singleLineText.substring(0, ssnStartIndex).trim();
-            String nameBeforeSSN = textBeforeSSN.replaceAll("[^가-힣]", "").replaceAll("\\.$", "");
+            // 주민등록번호 바로 위의 줄이 이름으로 간주
+            if (lines.length > 0) {
+                String possibleName = lines[lines.length - 1].trim(); // 주민등록번호 바로 위의 줄
 
-            // 두 이름 후보 중 하나라도 존재하면 반환
-            if (!nameAfterLastHyphenNumber.isEmpty()) {
-                return nameAfterLastHyphenNumber;
-            } else if (!nameBeforeSSN.isEmpty()) {
-                return nameBeforeSSN;
+                // 이름 후보에서 괄호 및 괄호 안의 문자 제거 후 한글만 남김
+                possibleName = possibleName.replaceAll("\\([^)]*\\)", ""); // 괄호와 그 안의 내용 제거
+                possibleName = possibleName.replaceAll("[^가-힣]", ""); // 한글만 남김
+
+                if (!possibleName.isEmpty()) {
+                    Log.d("OcrActivity", "추출된 이름: " + possibleName);
+                    return possibleName;
+                }
             }
         }
-
-        return null;  // 이름을 찾지 못한 경우 null 반환
+        Log.d("OcrActivity", "이름을 찾을 수 없음");
+        return null;
     }
 
 

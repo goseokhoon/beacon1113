@@ -10,7 +10,12 @@ public class Kartrider implements Parcelable {
     private int quantity; // 상품 수량
 
     // 기본 생성자
-    public Kartrider() {}
+    public Kartrider() {
+        this.id = "";
+        this.name = "";
+        this.price = 0; // 기본 가격
+        this.quantity = 0; // 기본 수량
+    }
 
     // 생성자
     public Kartrider(String id, String name, int price, int quantity) {

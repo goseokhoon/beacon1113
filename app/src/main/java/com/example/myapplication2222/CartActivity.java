@@ -16,10 +16,16 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,13 +47,16 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
     private Map<String, Boolean> restrictedProducts = new HashMap<>();
     private boolean isDialogShowing = false; // 다이얼로그 표시 상태
     private boolean dataLoaded = false; // 데이터 로드 상태
-
+    private ListenerRegistration listenerRegistration;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_cart);
 
         context = this;
+
+        // Firestore 객체 초기화
+        db = FirebaseFirestore.getInstance();
 
         // RecyclerView 초기화
         recyclerView = findViewById(R.id.recycler_view);
@@ -61,20 +70,14 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         // 총 결제액 TextView 초기화
         totalPriceTextView = findViewById(R.id.total_amount);
 
-        // FirebaseFirestore 객체 초기화
-        db = FirebaseFirestore.getInstance();
-
         // Firestore에서 상품 데이터와 미성년자 구매 불가 품목 데이터 가져오기
-        fetchProducts();
         fetchRestrictedProducts();
-
-        // Firestore 실시간 업데이트 설정
-        setupFirestoreListener();
 
         // '결제' 버튼 설정
         Button payButton = findViewById(R.id.pay_button);
         payButton.setOnClickListener(v -> handlePayment());
     }
+
 
     private boolean containsRestrictedProducts() {
         for (Kartrider product : productList) {
@@ -84,32 +87,19 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         }
         return false;
     }
-
-    private void fetchProducts() {
-        db.collection("kartrider")
-                .get()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        List<Kartrider> newProductList = new ArrayList<>();
-                        for (QueryDocumentSnapshot document : task.getResult()) {
-                            Kartrider product = document.toObject(Kartrider.class);
-                            product.setId(document.getId()); // Firestore document ID를 Kartrider 객체에 설정
-                            newProductList.add(product);
-                        }
-                        runOnUiThread(() -> {
-                            productList.clear();
-                            productList.addAll(newProductList);
-                            productAdapter.notifyDataSetChanged();
-                            updateTotalPrice();
-                            checkDataLoaded(); // 데이터 로드 체크 추가
-                        });
-                    } else {
-                        Log.e("CartActivity", "Error fetching data: " + task.getException());
-                        runOnUiThread(() -> Toast.makeText(context, "데이터를 가져오는 데 실패했습니다.", Toast.LENGTH_SHORT).show());
-                    }
-                });
+    @Override
+    protected void onStart() {
+        super.onStart();
+        setupFirestoreListener();
     }
-
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Activity가 중지될 때 리스너를 제거하여 리소스를 절약
+        if (listenerRegistration != null) {
+            listenerRegistration.remove();
+        }
+    }
     private void fetchRestrictedProducts() {
         db.collection("inventory")
                 .get()
@@ -117,42 +107,43 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
                     if (task.isSuccessful()) {
                         restrictedProducts.clear();
                         for (QueryDocumentSnapshot document : task.getResult()) {
-                            // `allow` 필드가 String인지 확인
                             Object allowObject = document.get("allow");
                             if (allowObject instanceof String) {
                                 String allow = (String) allowObject;
                                 restrictedProducts.put(document.getId(), "No".equalsIgnoreCase(allow));
                             } else {
                                 Log.w("CartActivity", "Field 'allow' is not a String or is missing");
-                                // 필드가 없거나 String이 아닌 경우 기본값 처리
                                 restrictedProducts.put(document.getId(), false);
                             }
                         }
-                        checkDataLoaded(); // 데이터 로드 체크 추가
+                        checkDataLoaded(); // 제약 데이터 로드 후 확인
                     } else {
                         Log.e("CartActivity", "Error fetching restricted products: " + task.getException());
                     }
                 });
     }
 
+
+
     private void checkDataLoaded() {
-        // 두 데이터가 모두 로드되었는지 확인
         if (!productList.isEmpty() && !restrictedProducts.isEmpty()) {
             dataLoaded = true;
+            Log.d("CartActivity", "Data fully loaded.");
         }
     }
 
+
     private void setupFirestoreListener() {
-        db.collection("kartrider")
+        listenerRegistration = db.collection("kartrider")
                 .addSnapshotListener((queryDocumentSnapshots, e) -> {
                     if (e != null) {
                         Log.w("CartActivity", "Listen failed.", e);
                         return;
                     }
-                    if (queryDocumentSnapshots != null) {
+                    if (queryDocumentSnapshots != null && !queryDocumentSnapshots.isEmpty()) {
                         for (DocumentChange dc : queryDocumentSnapshots.getDocumentChanges()) {
                             Kartrider updatedProduct = dc.getDocument().toObject(Kartrider.class);
-                            updatedProduct.setId(dc.getDocument().getId()); // Firestore document ID를 Kartrider 객체에 설정
+                            updatedProduct.setId(dc.getDocument().getId());
                             switch (dc.getType()) {
                                 case ADDED:
                                     addProductToList(updatedProduct);
@@ -166,20 +157,28 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
                             }
                         }
                         updateTotalPrice();
+                        checkDataLoaded(); // 데이터를 불러온 후 상태를 확인
+                    } else {
+                        Log.d("CartActivity", "No documents found in snapshot.");
                     }
                 });
     }
+
+
+
 
     private void addProductToList(Kartrider product) {
         if (product != null && product.getId() != null) {
             if (findProductIndexById(product.getId()) == -1) {
                 productList.add(product);
                 productAdapter.notifyItemInserted(productList.size() - 1);
+                Log.d("CartActivity", "Added product to list: " + product.toString());
             }
         } else {
             Log.e("CartActivity", "Product or Product ID is null. Cannot add to list.");
         }
     }
+
 
     private void updateProductInList(Kartrider product) {
         if (product != null && product.getId() != null) {
@@ -187,6 +186,7 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
             if (index != -1) {
                 productList.set(index, product);
                 productAdapter.notifyItemChanged(index);
+                Log.d("CartActivity", "Updated product in list: " + product.toString());
             }
         } else {
             Log.e("CartActivity", "Product or Product ID is null. Cannot update list.");
@@ -197,8 +197,9 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         if (productId != null) {
             int index = findProductIndexById(productId);
             if (index != -1) {
-                productList.remove(index);
+                Kartrider removedProduct = productList.remove(index);
                 productAdapter.notifyItemRemoved(index);
+                Log.d("CartActivity", "Removed product from list: " + removedProduct.toString());
             }
         } else {
             Log.e("CartActivity", "Product ID is null. Cannot remove from list.");
@@ -237,21 +238,17 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
             db.collection("kartrider").document(productId).delete()
                     .addOnSuccessListener(aVoid -> {
                         // 삭제 성공 후 리스트에서 상품 제거
-                        if (position >= 0 && position < productList.size()) { // 위치 확인
-                            productList.remove(position);
-                            productAdapter.notifyItemRemoved(position); // 어댑터에 삭제 알림
+                        productList.remove(position);
+                        productAdapter.notifyItemRemoved(position); // 어댑터에 삭제 알림
 
-                            // 총 결제 금액 업데이트
-                            updateTotalPrice();
+                        // 총 결제 금액 업데이트
+                        updateTotalPrice();
 
-                            // 장바구니가 비어 있는지 확인
-                            if (productList.isEmpty()) {
-                                // UI 업데이트 (예: 비어있음 메시지 표시)
-                                Toast.makeText(this, "장바구니가 비어 있습니다.", Toast.LENGTH_SHORT).show();
-                            }
+                        // 장바구니가 비어 있는지 확인
+                        if (productList.isEmpty()) {
+                            // UI 업데이트 (예: 비어있음 메시지 표시)
+                            Toast.makeText(this, "장바구니가 비어 있습니다.", Toast.LENGTH_SHORT).show();
                         }
-                        // 상품 목록을 다시 불러오기
-                        loadProductList();
                     })
                     .addOnFailureListener(e -> {
                         Toast.makeText(this, "상품 삭제에 실패했습니다.", Toast.LENGTH_SHORT).show();
@@ -260,7 +257,6 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
             Log.e("CartActivity", "Invalid position for deletion: " + position);
         }
     }
-
     private void loadProductList() {
         db.collection("kartrider")
                 .get()
@@ -286,6 +282,7 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
     private void handlePayment() {
         if (!dataLoaded) {
             Toast.makeText(context, "데이터가 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.", Toast.LENGTH_SHORT).show();
+            Log.d("CartActivity", "Data not loaded yet. dataLoaded = " + dataLoaded);
             return;
         }
 
@@ -299,9 +296,7 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         if (containsRestrictedProducts()) {
             if (!isAdult) {
                 // 미성년자 구매 불가 품목이 있는 경우 성인 인증을 요구
-                if (!isDialogShowing) {
-                    showAgeRestrictionDialog();
-                }
+                showAgeVerificationDialog();
             } else {
                 // 성인 인증이 완료된 경우 결제 처리
                 navigateToOrderSummary();
@@ -314,14 +309,8 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         }
     }
 
-    private void resetAdultVerification() {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.putBoolean(KEY_IS_ADULT, false);
-        editor.apply();
-    }
 
-    private void showAgeRestrictionDialog() {
+    private void showAgeVerificationDialog() {
         isDialogShowing = true;
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_age_verification, null);
@@ -332,11 +321,40 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
 
         Button confirmButton = dialogView.findViewById(R.id.confirm_button);
         confirmButton.setOnClickListener(v -> {
-            // OcrActivity를 시작하여 신분증 스캔 및 성인 인증을 수행합니다.
-            Intent intent = new Intent(CartActivity.this, OcrActivity.class);
-            startActivityForResult(intent, REQUEST_CODE_OCR);
-            dialog.dismiss(); // 다이얼로그를 닫습니다.
+            FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+            if (currentUser != null) {
+                StorageReference faceImageRef = FirebaseStorage.getInstance()
+                        .getReference()
+                        .child("faces/" + currentUser.getUid() + "_face.jpg");
+
+                faceImageRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                    // 얼굴 이미지가 존재하는 경우 FaceVerificationActivity로 이동
+                    Intent intent = new Intent(CartActivity.this, FaceVerificationActivity.class);
+                    startActivityForResult(intent, REQUEST_CODE_OCR);
+                    dialog.dismiss();
+                }).addOnFailureListener(e -> {
+                    // 얼굴 이미지가 존재하지 않으면 등록 요청 메시지를 표시하고 메인으로 이동
+                    Toast.makeText(this, "회원 정보 관리에서 성인 인증을 해주세요.", Toast.LENGTH_SHORT).show();
+                    Intent intent = new Intent(CartActivity.this, MainActivity.class);
+                    startActivity(intent);
+                    finish();
+                    dialog.dismiss();
+                });
+            } else {
+                Toast.makeText(this, "사용자가 로그인되어 있지 않습니다.", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            }
         });
+    }
+
+
+
+
+    private void resetAdultVerification() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putBoolean(KEY_IS_ADULT, false);
+        editor.apply();
     }
 
     @Override
@@ -375,4 +393,5 @@ public class CartActivity extends AppCompatActivity implements KartriderAdapter.
         startActivity(intent);
         finish(); // 현재 Activity 종료
     }
+
 }
