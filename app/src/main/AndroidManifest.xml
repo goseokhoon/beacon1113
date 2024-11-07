@@ -57,6 +57,7 @@
         <activity android:name=".RecommendationActivity"
             android:theme="@style/DialogActivityTheme"/>
         <activity android:name=".FaceRegistrationActivity" />
+        <activity android:name=".DeleteAccountActivity" />
 
         <meta-data
             android:name="com.google.firebase.ml.vision.DEPENDENCIES"

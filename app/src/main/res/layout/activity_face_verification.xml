@@ -61,7 +61,7 @@
             android:id="@+id/faceVerificationTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="3차 얼굴 인증"
+            android:text="얼굴 인증"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_gravity="center"
@@ -93,7 +93,6 @@
             android:gravity="center"
             android:layout_marginTop="16dp">
 
-
             <Button
                 android:id="@+id/verifyFaceButton"
                 android:layout_width="0dp"
@@ -101,7 +100,8 @@
                 android:layout_weight="1"
                 android:text="얼굴 인증"
                 android:layout_marginStart="4dp"
-                android:onClick="onVerifyFaceButtonClick" />
+                android:backgroundTint="#2196F3"/> <!-- 파란색 설정 -->
+
         </LinearLayout>
 
         <!-- 카메라 전환 버튼 -->
@@ -111,7 +111,8 @@
             android:layout_height="wrap_content"
             android:text="카메라 전환"
             android:layout_gravity="center"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="16dp"
+            android:backgroundTint="#2196F3" />  <!-- 파란색 설정 -->
     </LinearLayout>
 
 </LinearLayout>

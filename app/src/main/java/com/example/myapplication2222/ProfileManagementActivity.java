@@ -12,6 +12,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import java.util.Map;
+import java.util.HashMap;
+
 
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.EmailAuthProvider;
@@ -22,9 +25,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 
 public class ProfileManagementActivity extends AppCompatActivity {
     private FirebaseAuth mAuth;
@@ -48,14 +49,28 @@ public class ProfileManagementActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // 로그인한 사용자 확인
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser == null) {
             Toast.makeText(this, "로그인 후 접근할 수 있습니다.", Toast.LENGTH_SHORT).show();
-            finish(); // 현재 Activity 종료
+            finish();
             return;
         }
 
+        initializeUIElements();
+        loadUserProfile(currentUser);
+
+        saveButton.setOnClickListener(v -> saveUserProfile());
+        deleteAccountButton.setOnClickListener(v -> {
+            Intent intent = new Intent(ProfileManagementActivity.this, DeleteAccountActivity.class);
+            startActivity(intent);
+        });
+        adultVerificationButton.setOnClickListener(v -> {
+            Intent intent = new Intent(ProfileManagementActivity.this, OcrActivity.class);
+            startActivity(intent);
+        });
+    }
+
+    private void initializeUIElements() {
         editTextName = findViewById(R.id.editTextName);
         editTextCurrentPassword = findViewById(R.id.editTextCurrentPassword);
         editTextNewPassword = findViewById(R.id.editTextNewPassword);
@@ -67,23 +82,22 @@ public class ProfileManagementActivity extends AppCompatActivity {
         deleteAccountButton = findViewById(R.id.delete_account_button);
         adultVerificationButton = findViewById(R.id.adultVerificationButton);
 
+        // 발급일자 포맷 적용
         editTextIssueDate.addTextChangedListener(new TextWatcher() {
             private boolean isFormatting = false;
 
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
 
             @Override
             public void afterTextChanged(Editable s) {
                 if (isFormatting) return;
 
                 isFormatting = true;
-                String input = s.toString().replaceAll("[^\\d]", ""); // 숫자만 남기기
+                String input = s.toString().replaceAll("[^\\d]", "");
                 String formatted = formatAsDate(input);
                 s.replace(0, s.length(), formatted);
                 isFormatting = false;
@@ -98,52 +112,32 @@ public class ProfileManagementActivity extends AppCompatActivity {
                 return input;
             }
         });
-
-        loadUserProfile(currentUser); // 현재 로그인한 사용자 프로필 로드
-        saveButton.setOnClickListener(v -> saveUserProfile());
-        deleteAccountButton.setOnClickListener(v -> deleteUserAccount());
-
-        adultVerificationButton.setOnClickListener(v -> {
-            Intent intent = new Intent(ProfileManagementActivity.this, OcrActivity.class);
-            startActivity(intent);
-        });
     }
 
     private void loadUserProfile(FirebaseUser currentUser) {
         SharedPreferences preferences = getSharedPreferences("UserProfile", MODE_PRIVATE);
-        String name = preferences.getString("name", null);
-        String ssn = preferences.getString("ssn", null);
-        String issueDate = preferences.getString("issueDate", null);
 
-        if (name == null) {
-            // Firestore에서 데이터 가져오기
-            db.collection("users").document(currentUser.getUid())
-                    .get()
-                    .addOnSuccessListener(documentSnapshot -> {
-                        if (documentSnapshot.exists()) {
-                            // 로컬 저장소에 저장
-                            SharedPreferences.Editor editor = preferences.edit();
-                            editor.putString("name", documentSnapshot.getString("name"));
-                            editor.putString("ssn", documentSnapshot.getString("ssn"));
-                            editor.putString("issueDate", documentSnapshot.getString("issueDate"));
-                            editor.apply();
+        db.collection("users").document(currentUser.getUid())
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        String name = documentSnapshot.getString("name");
+                        String ssn = documentSnapshot.getString("ssn");
+                        String issueDate = documentSnapshot.getString("issueDate");
 
-                            // UI 업데이트
-                            editTextName.setText(documentSnapshot.getString("name"));
-                            textViewSSN.setText("주민등록번호: " + documentSnapshot.getString("ssn"));
-                            String fetchedIssueDate = documentSnapshot.getString("issueDate");
-                            textViewCurrentIssueDate.setText("현재 발급일자: " + fetchedIssueDate);
-                            editTextIssueDate.setText(fetchedIssueDate);
-                        }
-                    })
-                    .addOnFailureListener(e -> Toast.makeText(this, "프로필 정보를 가져오는 데 실패했습니다.", Toast.LENGTH_SHORT).show());
-        } else {
-            // 로컬 저장소에서 데이터 설정
-            editTextName.setText(name);
-            textViewSSN.setText("주민등록번호: " + ssn);
-            textViewCurrentIssueDate.setText("현재 발급일자: " + issueDate);
-            editTextIssueDate.setText(issueDate);
-        }
+                        SharedPreferences.Editor editor = preferences.edit();
+                        editor.putString("name", name);
+                        editor.putString("ssn", ssn);
+                        editor.putString("issueDate", issueDate);
+                        editor.apply();
+
+                        editTextName.setText(name);
+                        textViewSSN.setText("주민등록번호: " + ssn);
+                        textViewCurrentIssueDate.setText("현재 발급일자: " + issueDate);
+                        editTextIssueDate.setText(issueDate);
+                    }
+                })
+                .addOnFailureListener(e -> Toast.makeText(this, "프로필 정보를 가져오는 데 실패했습니다.", Toast.LENGTH_SHORT).show());
     }
 
     private void saveUserProfile() {
@@ -185,7 +179,7 @@ public class ProfileManagementActivity extends AppCompatActivity {
                     }
                 });
             } else {
-                updateProfileWithoutPassword(currentUser, name, formattedIssueDate);
+                updateUserProfileInFirestore(currentUser, name, formattedIssueDate);
             }
         }
     }
@@ -193,24 +187,14 @@ public class ProfileManagementActivity extends AppCompatActivity {
     private void updatePasswordAndProfile(FirebaseUser currentUser, String newPassword, String name, String issueDate) {
         currentUser.updatePassword(newPassword).addOnCompleteListener(passwordTask -> {
             if (passwordTask.isSuccessful()) {
-                Map<String, Object> userUpdates = new HashMap<>();
-                userUpdates.put("name", name);
-                userUpdates.put("issueDate", issueDate);
-
-                db.collection("users").document(currentUser.getUid())
-                        .update(userUpdates)
-                        .addOnSuccessListener(aVoid -> {
-                            Toast.makeText(this, "프로필이 업데이트되었습니다.", Toast.LENGTH_SHORT).show();
-                            navigateToMainActivity();
-                        })
-                        .addOnFailureListener(e -> Toast.makeText(this, "프로필 업데이트에 실패했습니다.", Toast.LENGTH_SHORT).show());
+                updateUserProfileInFirestore(currentUser, name, issueDate);
             } else {
                 Toast.makeText(this, "비밀번호 변경에 실패했습니다.", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    private void updateProfileWithoutPassword(FirebaseUser currentUser, String name, String issueDate) {
+    private void updateUserProfileInFirestore(FirebaseUser currentUser, String name, String issueDate) {
         Map<String, Object> userUpdates = new HashMap<>();
         userUpdates.put("name", name);
         userUpdates.put("issueDate", issueDate);
@@ -228,23 +212,5 @@ public class ProfileManagementActivity extends AppCompatActivity {
         Intent intent = new Intent(ProfileManagementActivity.this, MainActivity.class);
         startActivity(intent);
         finish();
-    }
-
-    private void deleteUserAccount() {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser != null) {
-            db.collection("users").document(currentUser.getUid()).delete()
-                    .addOnSuccessListener(aVoid -> {
-                        currentUser.delete().addOnCompleteListener(task -> {
-                            if (task.isSuccessful()) {
-                                Toast.makeText(this, "계정이 삭제되었습니다.", Toast.LENGTH_SHORT).show();
-                                finish();
-                            } else {
-                                Toast.makeText(this, "계정 삭제에 실패했습니다.", Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                    })
-                    .addOnFailureListener(e -> Toast.makeText(this, "사용자 데이터 삭제에 실패했습니다.", Toast.LENGTH_SHORT).show());
-        }
     }
 }
