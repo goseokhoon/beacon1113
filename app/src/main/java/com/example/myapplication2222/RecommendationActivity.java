@@ -1,5 +1,6 @@
 package com.example.myapplication2222;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
@@ -44,8 +45,10 @@ public class RecommendationActivity extends AppCompatActivity {
 
         // 닫기 버튼 클릭 리스너 설정
         closeButton.setOnClickListener(v -> {
-            MapActivity.recommendationShown = false; // 다이얼로그가 닫히면 상태를 리셋
-            finish(); // Activity 종료
+            Intent intent = new Intent();
+            intent.putExtra("beaconId", getIntent().getIntExtra("beaconId", -1));  // 현재 코너 beaconId 전달
+            setResult(RESULT_OK, intent);  // 결과 전달
+            finish();  // 액티비티 종료
         });
 
     }

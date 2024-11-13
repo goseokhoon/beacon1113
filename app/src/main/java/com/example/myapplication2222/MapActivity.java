@@ -31,6 +31,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.HashSet;
+import java.util.Set;
 class KalmanFilter {
     private double q; // 프로세스 노이즈 공분산
     private double r; // 측정 노이즈 공분산
@@ -222,15 +224,17 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     private Map<Integer, Long> beaconStayTimes = new HashMap<>();
     private static final long RECOMMENDATION_DELAY = 5000; // 5초
     public static boolean recommendationShown = false; // 추천 다이얼로그가 이미 표시되었는지 확인하는 변수
+    private Set<Integer> shownRecommendations = new HashSet<>(); // 이미 추천된 코너 저장
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_map);
-
+        shownRecommendations = new HashSet<>(); // onCreate에서 한 번만 초기화
         // 각 비콘에 대해 다른 RSSI 상수 및 감쇠 지수 설정
-        rssiConstantA.put("beacon1", -65.0);
-        rssiConstantA.put("beacon2", -65.0);
-        rssiConstantA.put("beacon3", -65.0);
+        rssiConstantA.put("beacon1", -60.0);
+        rssiConstantA.put("beacon2", -60.0);
+        rssiConstantA.put("beacon3", -60.0);
 
         pathLossExponentN1.put("beacon1", 3.5);
         pathLossExponentN1.put("beacon2", 3.5);
@@ -433,7 +437,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
                     customView.updateBeaconPosition(minor - 1, beaconXScreen, beaconYScreen, radius, color);
 
                     // 비콘 거리와 시간 조건 체크
-                    if (distance <= 0.5 && !recommendationShown) { // 0.5m 이내에 있을 때
+                    if (distance <= 0.5 && !recommendationShown && !shownRecommendations.contains(minor)) { // 0.5m 이내에 있을 때
                         long currentTime = System.currentTimeMillis();
                         if (!beaconStayTimes.containsKey(minor)) {
                             beaconStayTimes.put(minor, currentTime); // 처음으로 비콘이 감지되었을 때 시간 저장
@@ -442,6 +446,8 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
                             if (elapsedTime >= RECOMMENDATION_DELAY) { // 5초가 지나고 다이얼로그가 아직 표시되지 않았다면
                                 navigateToRecommendationActivity(minor); // 추천 액티비티 호출
                                 recommendationShown = true; // 다이얼로그 표시 상태 업데이트
+                                shownRecommendations.add(minor); // 이미 추천된 코너로 기록
+                                beaconStayTimes.remove(minor); // 동일 코너에서 다시 추천되지 않도록 타이머 제거
                             }
                         }
                     } else {
@@ -500,26 +506,36 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
         }
     };
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 1 && resultCode == RESULT_OK) {
+            int beaconId = data.getIntExtra("beaconId", -1);  // RecommendationActivity에서 전달된 beaconId 받기
+            if (beaconId != -1) {
+                shownRecommendations.add(beaconId);  // 이미 추천된 코너로 추가
+            }
+            recommendationShown = false; // 다이얼로그가 닫혔으므로 추천 상태 리셋
+        }
+    }
 
     private void navigateToRecommendationActivity(int beaconId) {
-        Intent intent = new Intent(this, RecommendationActivity.class);
-        intent.putExtra("beaconId", beaconId);
-        startActivity(intent);
-
-        // 다이얼로그가 표시되면 상태 업데이트
-        recommendationShown = true;
+        if (!shownRecommendations.contains(beaconId) && !recommendationShown) {
+            Intent intent = new Intent(this, RecommendationActivity.class);
+            intent.putExtra("beaconId", beaconId);
+            startActivityForResult(intent, 1);
+            recommendationShown = true;
+            shownRecommendations.add(beaconId); // 코너 ID를 중복 방지 세트에 추가
+        }
     }
+
     // RecommendationActivity에서 다이얼로그 닫기 버튼 클릭 시
     private void onCloseRecommendationDialog() {
-        // 다이얼로그를 닫을 때 호출되는 메서드
         recommendationShown = false; // 다이얼로그가 닫혔으므로 다시 표시 가능
-        finish(); // Activity 종료
     }
-
 
     private boolean allBeaconsStrong() {
         for (Beacon beacon : beaconList) {
-            if (beacon.getRssi() < -65) { // 기존 -70에서 -65로 신호 강도 기준 상향
+            if (beacon.getRssi() < -65) { // -65로 신호 강도 기준 상향
                 return false;
             }
         }
@@ -662,16 +678,13 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
         super.onResume();
         Log.d(TAG, "MapActivity resumed, binding beacon manager");
 
-        // 상태를 초기화
         recommendationShown = false; // 다이얼로그 상태 리셋
         beaconList.clear(); // 비콘 리스트 초기화
 
-        // 비콘 매니저가 바인딩되지 않았다면 바인딩
         if (!beaconManager.isBound(this)) {
             beaconManager.bind(this);
         }
 
-        // 비콘 탐지 시작
         handler.sendEmptyMessage(0); // 비콘 탐지 시작
     }
     @Override
