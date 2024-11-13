@@ -146,11 +146,11 @@ class ParticleFilter {
     private double[] getBeaconPosition(int beaconId) {
         switch (beaconId) {
             case 1:
-                return new double[]{1.5, 2.5};
+                return new double[]{1, 2.8};
             case 2:
-                return new double[]{2.5, 0.5};
+                return new double[]{2.5, 0.3};
             case 3:
-                return new double[]{3.5, 2.5};
+                return new double[]{4, 2.8};
             default:
                 return new double[]{0, 0};
         }
@@ -232,17 +232,17 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
         setContentView(R.layout.activity_map);
         shownRecommendations = new HashSet<>(); // onCreate에서 한 번만 초기화
         // 각 비콘에 대해 다른 RSSI 상수 및 감쇠 지수 설정
-        rssiConstantA.put("beacon1", -60.0);
-        rssiConstantA.put("beacon2", -60.0);
-        rssiConstantA.put("beacon3", -60.0);
+        rssiConstantA.put("beacon1", -62.0);
+        rssiConstantA.put("beacon2", -62.0);
+        rssiConstantA.put("beacon3", -62.0);
 
-        pathLossExponentN1.put("beacon1", 3.5);
-        pathLossExponentN1.put("beacon2", 3.5);
-        pathLossExponentN1.put("beacon3", 3.5);
+        pathLossExponentN1.put("beacon1", 4.0);
+        pathLossExponentN1.put("beacon2", 4.0);
+        pathLossExponentN1.put("beacon3", 4.0);
 
-        pathLossExponentN2.put("beacon1", 3.5);
-        pathLossExponentN2.put("beacon2", 3.5);
-        pathLossExponentN2.put("beacon3", 3.5);
+        pathLossExponentN2.put("beacon1", 4.0);
+        pathLossExponentN2.put("beacon2", 4.0);
+        pathLossExponentN2.put("beacon3", 4.0);
 
         // 칼만 필터 초기화 - 파라미터 최적화
         kalmanFilterX = new KalmanFilter(0.02, 0.15);
@@ -296,9 +296,9 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
         double calibratedRssi = rssi + rssiCalibration.getOrDefault(beaconId, 0.0);
 
         // 비콘별 RSSI 상수 및 감쇠 지수 가져오기
-        double A = rssiConstantA.getOrDefault(beaconId, -70.0);
-        double N1 = pathLossExponentN1.getOrDefault(beaconId, 2.5);
-        double N2 = pathLossExponentN2.getOrDefault(beaconId, 3.3);
+        double A = rssiConstantA.getOrDefault(beaconId, -62.0);
+        double N1 = pathLossExponentN1.getOrDefault(beaconId, 4.0);
+        double N2 = pathLossExponentN2.getOrDefault(beaconId, 4.0);
 
         double distance;
         // 비콘 간 상호 검증을 통해 신호가 약해진 경우 보정
@@ -357,13 +357,13 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
         double[] beaconPosition;
         switch (beaconId) {
             case "beacon1":
-                beaconPosition = new double[]{1.5, 2.5};
+                beaconPosition = new double[]{1, 2.8};
                 break;
             case "beacon2":
-                beaconPosition = new double[]{2.5, 0.5};
+                beaconPosition = new double[]{2.5, 0.3};
                 break;
             case "beacon3":
-                beaconPosition = new double[]{3.5, 2.5};
+                beaconPosition = new double[]{4, 2.8};
                 break;
             default:
                 return MAX_DISTANCE; // 알 수 없는 비콘의 경우 최대 거리 반환
@@ -502,7 +502,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
             }
 
             customView.invalidate();
-            sendEmptyMessageDelayed(0, 250); // 갱신 간격
+            sendEmptyMessageDelayed(0, 300); // 갱신 간격
         }
     };
 
@@ -543,7 +543,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     }
 
     private double[] calculateUserPosition(Map<Integer, Double> distances) {
-        double[][] beacons = {{1.5, 2.5}, {2.5, 0.5}, {3.5, 2.5}};
+        double[][] beacons = {{1, 2.8}, {2.5, 0.3}, {4, 2.8}};
 
         // 삼변측량법을 사용한 위치 추정
         double[] trilaterationPosition = trilaterate(distances);
@@ -629,7 +629,7 @@ public class MapActivity extends AppCompatActivity implements BeaconConsumer {
     }
 
     private double[] trilaterate(Map<Integer, Double> distances) {
-        double[][] beacons = {{1.5, 2.5}, {2.5, 0.5}, {3.5, 2.5}};
+        double[][] beacons = {{1, 2.8}, {2.5, 0.3}, {4, 2.8}};
 
         // 삼변측량 계산
         double[] centroid = {0, 0};
